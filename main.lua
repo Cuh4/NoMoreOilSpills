@@ -1,6 +1,6 @@
 --------------
 --[[
-    cuhHub - No More Oil
+    cuhHub - No More Oil Spills
     Created by cuh5_ (Discord)
     This addon uses the Aurora Framework. (https://github.com/Roozz1/AuroraFramework)
 ]]
@@ -16,6 +16,7 @@
 ----------------------------------------------------------------
 ---@type table<integer, af_services_player_player>
 playersUnfiltered = {}
+oilSpillCleanupEnabled = true
 
 ----------------------------------------------------------------
 -- Functions
@@ -49,3 +50,18 @@ debugLibrary.initialize()
 ----------------------------------------------------------------
 -- Main
 ----------------------------------------------------------------
+-- Oil Cleanup
+AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, delta, total, vehicle_id)
+    if not oilSpillCleanupEnabled then
+        return
+    end
+
+    server.setOilSpill(matrix.translation(tile_x, 0, tile_y), 0)
+
+    if vehicle_id == -1 then
+        return
+    end
+
+    local pos = server.getVehiclePos(vehicle_id)
+    server.setOilSpill(pos, 0)
+end)
