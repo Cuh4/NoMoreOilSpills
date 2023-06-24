@@ -2836,7 +2836,7 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, 
     end
 
     -- clear oil
-    server.setOilSpill(matrix.translation(tile_x, 0, tile_y), 0)
+    server.setOilSpill(matrix.translation(tile_x, 0, tile_y), -100)
 
     -- no vehicle, just oil spill update or something
     if vehicle_id == -1 then
