@@ -2819,6 +2819,10 @@ debugLibrary.initialize()
 ----------------------------------------------------------------
 -- Oil Cleanup via player position
 AuroraFramework.libraries.timer.loop.create(0.1, function()
+    if not oilSpillCleanupEnabled then
+        return
+    end
+
     for _, player in pairs(AuroraFramework.services.playerService.getAllPlayers()) do
         server.setOilSpill(player:getPosition(), -100)
     end
