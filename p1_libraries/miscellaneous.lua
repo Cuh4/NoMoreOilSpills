@@ -39,20 +39,6 @@ miscellaneousLibrary = {
         return closest, dist or 0
     end,
 
-    indentTable = function(tbl, indent)
-        if not indent then
-            indent = 0
-        end
-
-        for i, v in pairs(tbl) do
-            if type(v) == "string" then
-                tbl[i] = (" "):rep(indent)..v
-            end
-        end
-
-        return tbl
-    end,
-
     ---@return string
     surround = function(input, with)
         return with:sub(1, 1)..input..with:sub(-1, -1)
