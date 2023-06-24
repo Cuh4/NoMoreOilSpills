@@ -2817,7 +2817,14 @@ debugLibrary.initialize()
 ----------------------------------------------------------------
 -- Main
 ----------------------------------------------------------------
--- Oil Cleanup
+-- Oil Cleanup via player position
+AuroraFramework.libraries.timer.loop.create(0.1, function()
+    for _, player in pairs(AuroraFramework.services.playerService.getAllPlayers()) do
+        server.setOilSpill(player:getPosition(), -100)
+    end
+end)
+
+-- Oil Cleanup via callback
 AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, delta, total, vehicle_id)
     -- don't clean if disabled
     if not oilSpillCleanupEnabled then
@@ -2826,7 +2833,6 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, 
 
     -- clear oil
     server.setOilSpill(matrix.translation(tile_x, 0, tile_y), 0)
-    chatAnnounce("oil spill cleaned")
 
     -- no vehicle, just oil spill update or something
     if vehicle_id == -1 then
@@ -2835,5 +2841,5 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, 
 
     -- if there's a vehicle, then we should probably clean the area around the vehicle
     local pos = server.getVehiclePos(vehicle_id)
-    server.setOilSpill(pos, 0)
+    server.setOilSpill(pos, -100)
 end)
