@@ -3,30 +3,18 @@
 -----------------
 config = {
     info = {
-        addonName = "All Creatures Hate You",
-        author = "cuh4#7366",
+        addonName = "No More Oil Spills",
+        author = "cuh5_",
         invite = "https://discord.gg/zTQxaZjwDr",
-        helpMessage = "Watch out! All creatures will run after you if you get close! The Industrial Frontier DLC is also required.",
+        helpMessage = "Tired of the ocean being polluted with oil? No more! This addon cleans up all oil spills automatically.",
 
-        aridRequired = true,
+        aridRequired = false,
         weaponsRequired = false
     },
 
-    main = {
-        attackRange = property.slider("Creature Attack Range", 0.1, 4.0, 0.05, 2),
-        attackDamage = property.slider("Creature Attack Damage", 0.1, 100, 0.1, 12),
-        detectionRange = property.slider("Creature Detection Range", 1, 500, 0.1, 20),
-
-        unloadRange = 1000
-    },
-
-    misc = {
-        attackUI_duration = 0.4
-    },
-
-    isDedicatedServer = false,
+    isDedicatedServer = false, -- doesn't matter for this addon
     debugEnabled = true,
-    debugShouldLog = true,
+    debugShouldLog = true
 }
 
 -----------------
@@ -59,13 +47,19 @@ AuroraFramework.libraries.matrix = {}
 ---@param y number|nil 0 if nil
 ---@param z number|nil 0 if nil
 AuroraFramework.libraries.matrix.offset = function(position, x, y, z)
-	local toOffset ={x or 0, y or 0, z or 0}
+	local new = matrix.translation(0, 0, 0)
 
-	for i = 1, 3 do
-		position[12 + i] = position[12 + i] + toOffset[i]
+	for i, v in pairs(position) do
+		new[i] = v
 	end
 
-	return position
+	local toOffset = {x or 0, y or 0, z or 0}
+
+	for i = 1, 3 do
+		new[12 + i] = new[12 + i] + toOffset[i]
+	end
+
+	return new
 end
 
 -- Offsets the position by a random x, y, z, between -max, and max
@@ -78,6 +72,20 @@ end
 
 ---------------- Miscellaneous
 AuroraFramework.libraries.miscellaneous = {}
+
+-- Clamp a number between min and max
+---@param num number
+---@param min number
+---@param max number
+AuroraFramework.libraries.miscellaneous.clamp = function(num, min, max)
+	if num < min then
+		return min
+	elseif num > max then
+		return max
+	end
+
+	return num
+end
 
 -- Remove a value from a table
 ---@param tbl table
@@ -136,7 +144,6 @@ AuroraFramework.libraries.miscellaneous.round = function(input, numDecimalPlaces
     local mult = 10 ^ (numDecimalPlaces or 0)
     return math.floor(input * mult + 0.5) / mult
 end
-
 
 -- Converts a string to a bool ("true"/"TruE" = true, anything else = false)
 ---@param input string
@@ -577,6 +584,11 @@ AuroraFramework.services.vehicleService.internal.giveVehicleData = function(vehi
 		end,
 
 		---@param self af_services_vehicle_vehicle
+		repair = function(self)
+			server.resetVehicleState(self.properties.vehicle_id)
+		end,
+
+		---@param self af_services_vehicle_vehicle
 		getPosition = function(self, voxelX, voxelY, voxelZ)
 			return (server.getVehiclePos(self.properties.vehicle_id, voxelX, voxelY, voxelZ)) -- in brackets to only get pos, not success
 		end,
@@ -673,6 +685,13 @@ AuroraFramework.services.vehicleService.getVehicleCountOfPlayer = function(playe
 	return #AuroraFramework.services.vehicleService.getAllVehiclesSpawnedByAPlayer(player)
 end
 
+-- Returns whether or not two vehicles are the same
+---@param vehicle1 af_services_vehicle_vehicle
+---@param vehicle2 af_services_vehicle_vehicle
+AuroraFramework.services.vehicleService.isSameVehicle = function(vehicle1, vehicle2)
+	return vehicle1.properties.vehicle_id == vehicle2.properties.vehicle_id
+end
+
 --------------------------------------------------------------------------------
 --// Notification \\--
 --------------------------------------------------------------------------------
@@ -738,11 +757,51 @@ AuroraFramework.services.playerService = {
 			AuroraFramework.services.playerService.internal.removePlayerData(peer_id)
 		end)
 
+		-- Die event
+		AuroraFramework.game.callbacks.onPlayerDie.internal:connect(function(_, _, peer_id)
+			local player = AuroraFramework.services.playerService.getPlayerByPeerID(peer_id)
+
+			if not player then
+				return
+			end
+
+			AuroraFramework.services.playerService.events.onDie:fire(player)
+		end)
+
+		-- Respawn event
+		AuroraFramework.game.callbacks.onPlayerRespawn.internal:connect(function(peer_id)
+			local player = AuroraFramework.services.playerService.getPlayerByPeerID(peer_id)
+
+			if not player then
+				return
+			end
+
+			AuroraFramework.services.playerService.events.onRespawn:fire(player)
+		end)
+
+		-- Character load event
+		AuroraFramework.game.callbacks.onObjectLoad.internal:connect(function(object_id)
+			local player = AuroraFramework.services.playerService.getPlayerByObjectID(object_id)
+
+			if not player then
+				return
+			end
+
+			player.properties.characterLoaded = true
+			AuroraFramework.services.playerService.events.onCharacterLoad:fire(player)
+		end)
+
+		-- Update player properties
 		AuroraFramework.libraries.timer.delay.create(0.01, function() -- wait a tick for addon to attach callbacks to player events
 			-- Activate player join events
 			for _, v in pairs(server.getPlayers()) do
 				AuroraFramework.game.callbacks.onPlayerJoin.main:fire(v.steam_id, v.name, v.id, v.admin, v.auth)
 				AuroraFramework.game.callbacks.onPlayerJoin.internal:fire(v.steam_id, v.name, v.id, v.admin, v.auth)
+			end
+
+			for _, v in pairs(AuroraFramework.services.playerService.getAllPlayers()) do
+				v.properties.characterLoaded = true -- set character loaded to true on script reload n shit
+				AuroraFramework.services.playerService.events.onCharacterLoad:fire(v)
 			end
 
 			-- Update player data
@@ -765,14 +824,17 @@ AuroraFramework.services.playerService = {
 
 	events = {
 		onJoin = AuroraFramework.libraries.events.create("auroraFramework_onPlayerJoin"),
-		onLeave = AuroraFramework.libraries.events.create("auroraFramework_onPlayerLeave")
+		onLeave = AuroraFramework.libraries.events.create("auroraFramework_onPlayerLeave"),
+		onCharacterLoad = AuroraFramework.libraries.events.create("auroraFramework_onPlayerCharacterLoad"),
+		onDie = AuroraFramework.libraries.events.create("auroraFramework_onPlayerDie"),
+		onRespawn = AuroraFramework.libraries.events.create("auroraFramework_onPlayerRespawn")
 	},
 
 	internal = {}
 }
 
 -- Give player data to a player
-AuroraFramework.services.playerService.internal.givePlayerData = function(steam_id, name, peer_id, admin, auth)
+AuroraFramework.services.playerService.internal.givePlayerData = function(steam_id, name, peer_id, admin, auth, characterLoaded)
 	AuroraFramework.services.playerService.players[peer_id] = {
 		properties = {
 			steam_id = tostring(steam_id),
@@ -781,7 +843,8 @@ AuroraFramework.services.playerService.internal.givePlayerData = function(steam_
 			admin = admin,
 			auth = auth,
 			isHost = peer_id == 0,
-			storage = AuroraFramework.libraries.storage.create("player_"..peer_id.."_storage")
+			storage = AuroraFramework.libraries.storage.create("player_"..peer_id.."_storage"),
+			characterLoaded = characterLoaded or false
 		},
 
 		setItem = function(self, slot, to, active, int, float)
@@ -985,11 +1048,17 @@ AuroraFramework.services.HTTPService.URLArgs = function(url, ...)
 	local packed = {...}
 
 	for i, v in pairs(packed) do
+		if not v.name or not v.value then
+			goto continue
+		end
+
 		if i == 1 then
 			table.insert(args, "?"..AuroraFramework.services.HTTPService.URLEncode(v.name).."="..AuroraFramework.services.HTTPService.URLEncode(v.value))
 		else
 			table.insert(args, "&"..AuroraFramework.services.HTTPService.URLEncode(v.name).."="..AuroraFramework.services.HTTPService.URLEncode(v.value))
 		end
+
+		::continue::
 	end
 
 	-- anddd return
@@ -1055,7 +1124,6 @@ end
 --------------------------------------------------------------------------------
 AuroraFramework.services.chatService = {
 	initialize = function()
-		-- register messages
 		AuroraFramework.game.callbacks.onChatMessage.internal:connect(function(peer_id, _, content)
 			AuroraFramework.libraries.timer.delay.create(0.01, function() -- just so if the addon deletes the message, shit wont be fucked up (onchatmessage is fired before message is shown in chat)
 				-- get player
@@ -1068,8 +1136,16 @@ AuroraFramework.services.chatService = {
 				-- construct message
 				local message = AuroraFramework.services.chatService.internal.construct(player, content)
 
-				-- register
-				AuroraFramework.services.chatService.internal.register(message)
+				-- enforce message limit
+				if #AuroraFramework.services.chatService.messages >= 129 then
+					table.remove(AuroraFramework.services.chatService.messages, 1)
+				end
+
+				-- save the message
+				table.insert(AuroraFramework.services.chatService.messages, message)
+
+				-- fire event
+				AuroraFramework.services.chatService.events.onMessageSent:fire(message)
 			end)
 		end)
 	end,
@@ -1088,45 +1164,17 @@ AuroraFramework.services.chatService = {
 
 local af_messageID = 0
 
--- Register a message
----@param message af_services_chat_message
-AuroraFramework.services.chatService.internal.register = function(message)
-	-- enforce message limit
-	if #AuroraFramework.services.chatService.messages >= 129 then
-		table.remove(AuroraFramework.services.chatService.messages, 1)
-	end
-
-	-- save the message
-	table.insert(AuroraFramework.services.chatService.messages, message)
-
-	-- fire event
-	AuroraFramework.services.chatService.events.onMessageSent:fire(message)
-end
-
 -- Construct a message
----@param _player af_services_player_player|string
+---@param _player af_services_player_player
 ---@return af_services_chat_message
 AuroraFramework.services.chatService.internal.construct = function(_player, messageContent)
 	af_messageID = af_messageID + 1
-
-	local isSentByPlayer = true
-
-	if type(_player) == "string" then -- custom player
-		isSentByPlayer = false
-
-		_player = {
-			properties = {
-				name = _player
-			}
-		}
-	end
 
 	return {
 		properties = {
 			author = _player,
 			content = messageContent,
-			id = af_messageID,
-			isSentByPlayer = isSentByPlayer
+			id = af_messageID
 		},
 
 		---@param self af_services_chat_message
@@ -1228,89 +1276,25 @@ AuroraFramework.services.chatService.isSameMessage = function(message1, message2
 end
 
 -- Send a message to everyone/a player
----@param author string|any
----@param message string|any
+---@param author any
+---@param message any
 ---@param player af_services_player_player|nil
----@param shouldRegister boolean|nil True = Save this message internally, so it can be deleted or edited like a normal message
-AuroraFramework.services.chatService.sendMessage = function(author, message, player, shouldRegister)
-	local peer_id = AuroraFramework.libraries.miscellaneous.getPeerID(player)
-	server.announce(tostring(author), tostring(message), peer_id)
+AuroraFramework.services.chatService.sendMessage = function(author, message, player)
+	local peer_id = -1
 
-	if shouldRegister then
-		local msg = AuroraFramework.services.chatService.internal.construct(tostring(author), tostring(message))
-		AuroraFramework.services.chatService.internal.register(msg)
+	if player then
+		peer_id = player.properties.peer_id
 	end
+
+	server.announce(tostring(author), tostring(message), peer_id)
 end
 
--- Clear chat for everyone/a player by sending 129 blank messages
+-- Clear chat for everyone/a player
 ---@param player af_services_player_player|nil
 AuroraFramework.services.chatService.clear = function(player)
-	for _ = 1, 129 do
+	for _ = 1, 11 do
 		AuroraFramework.services.chatService.sendMessage(" ", " ", player)
 	end
-end
-
---------------------------------------------------------------------------------
---// Disasters \\--
---------------------------------------------------------------------------------
-AuroraFramework.services.disasterService = {}
-
--- Spawn a tsunami
----@param pos SWMatrix
----@param magnitude number|nil 0-1
-AuroraFramework.services.disasterService.startTsunami = function(pos, magnitude)
-	server.spawnTsunami(pos, magnitude or 1)
-
-	return {
-		-- Cancels this tsunami
-		cancel = function()
-			server.cancelGerstner()
-		end,
-	}
-end
-
--- Spawn a whirlpool
----@param pos SWMatrix
----@param magnitude number|nil 0-1
-AuroraFramework.services.disasterService.spawnWhirlpool = function(pos, magnitude)
-	server.spawnWhirlpool(pos, magnitude or 1)
-
-	return {
-		-- Cancels this tsunami
-		cancel = function()
-			server.cancelGerstner()
-		end,
-	}
-end
-
--- Spawn a meteor
----@param pos SWMatrix
----@param magnitude number|nil 0-1
----@param tsunamiOnImpact boolean|nil
-AuroraFramework.services.disasterService.spawnMeteor = function(pos, magnitude, tsunamiOnImpact)
-	server.spawnMeteor(pos, magnitude or 1, tsunamiOnImpact or false)
-end
-
--- Spawn a meteor shower
----@param pos SWMatrix
----@param magnitude number|nil 0-1
----@param tsunamiOnImpact boolean|nil
-AuroraFramework.services.disasterService.spawnMeteorShower = function(pos, magnitude, tsunamiOnImpact)
-	server.spawnMeteorShower(pos, magnitude or 1, tsunamiOnImpact or false)
-end
-
--- Spawn a tornado
----@param pos SWMatrix
----@param magnitude number|nil 0-1
-AuroraFramework.services.disasterService.spawnTornado = function(pos, magnitude)
-	server.spawnTornado(pos, magnitude or 1)
-end
-
--- Spawn a volcano
----@param pos SWMatrix
----@param magnitude number|nil 0-1
-AuroraFramework.services.disasterService.spawnVolcano = function(pos, magnitude)
-	server.spawnVolcano(pos, magnitude or 1)
 end
 
 --------------------------------------------------------------------------------
@@ -1416,27 +1400,13 @@ AuroraFramework.services.UIService = {
 	initialize = function()
 		-- show ui on join
 		AuroraFramework.services.playerService.events.onJoin:connect(function(player) ---@param player af_services_player_player
-			-- show screen ui
-			for _, ui in pairs(AuroraFramework.services.UIService.UI.screen) do
-				if not ui.properties.player then -- since the player who joined has a new peer id, they will never be the target of an ui object, so no point in checking
-					-- show to all
-					ui:refresh()
-				end
-			end
-
-			-- show map labels
-			for _, ui in pairs(AuroraFramework.services.UIService.UI.mapLabels) do
-				if not ui.properties.player then -- since the player who joined has a new peer id, they will never be the target of an ui object, so no point in checking
-					-- show to all
-					ui:refresh()
-				end
-			end
-
-			-- show map objects
-			for _, ui in pairs(AuroraFramework.services.UIService.UI.mapObjects) do
-				if not ui.properties.player then -- since the player who joined has a new peer id, they will never be the target of an ui object, so no point in checking
-					-- show to all
-					ui:refresh()
+			-- show all ui
+			for _, uiContainers in pairs(AuroraFramework.services.UIService.UI) do
+				for _, ui in pairs(uiContainers) do
+					if not ui.properties.player then -- since the player who joined has a new peer id, they will never be the target of an ui object, so no point in checking
+						-- show to all
+						ui:refresh()
+					end
 				end
 			end
 		end)
@@ -1450,7 +1420,10 @@ AuroraFramework.services.UIService = {
 		mapLabels = {},
 
 		---@type table<integer, af_services_ui_map_object>
-		mapObjects = {}
+		mapObjects = {},
+
+		---@type table<integer, af_services_ui_map_line>
+		mapLines = {}
 	},
 
 	internal = {}
@@ -1562,6 +1535,73 @@ AuroraFramework.services.UIService.removeMapLabel = function(id)
 	data:refresh() -- hide ui
 
 	AuroraFramework.services.UIService.UI.mapLabels[id] = nil
+end
+
+-- Create a Map Line
+---@param id number
+---@param startPoint SWMatrix
+---@param endPoint SWMatrix
+---@param thickness number
+---@param player af_services_player_player|nil
+---@param r integer|nil 0-255
+---@param g integer|nil 0-255
+---@param b integer|nil 0-255
+---@param a integer|nil 0-255
+AuroraFramework.services.UIService.createMapLine = function(id, startPoint, endPoint, thickness, r, g, b, a, player)
+	AuroraFramework.services.UIService.UI.mapLines[id] = {
+		properties = {
+			startPoint = startPoint,
+			endPoint = endPoint,
+			visible = true,
+			player = player,
+			id = id,
+
+			r = r or 255,
+			g = g or 255,
+			b = b or 255,
+			a = a or 255,
+
+			thickness = thickness
+		},
+
+		---@param self af_services_ui_map_line
+		refresh = function(self)
+			local peerID = AuroraFramework.libraries.miscellaneous.getPeerID(self.properties.player)
+			server.removeMapLine(peerID, self.properties.id)
+
+			if not self.properties.visible then -- if not visible, dont add the line back
+				return
+			end
+
+			server.addMapLine(peerID, self.properties.id, self.properties.startPoint, self.properties.endPoint, self.properties.thickness, self.properties.r, self.properties.g, self.properties.b, self.properties.a)
+		end,
+
+		---@param self af_services_ui_map_line
+		remove = function(self)
+			return AuroraFramework.services.UIService.removeMapLine(self.properties.id)
+		end,
+	}
+
+	local data = AuroraFramework.services.UIService.UI.mapLines[id]
+	data:refresh() -- show
+
+	return data
+end
+
+-- Get a Map Line
+---@param id number
+AuroraFramework.services.UIService.getMapLine = function(id)
+	return AuroraFramework.services.UIService.UI.mapLines[id]
+end
+
+-- Remove a Map Line
+---@param id number
+AuroraFramework.services.UIService.removeMapLine = function(id)
+	local data = AuroraFramework.services.UIService.UI.mapLines[id]
+	data.properties.visible = false
+	data:refresh() -- hide ui
+
+	AuroraFramework.services.UIService.UI.mapLines[id] = nil
 end
 
 -- Create a Map Object
@@ -2110,6 +2150,18 @@ function onVolcano(...)
 	AuroraFramework.game.callbacks.onVolcano.main:fire(...)
 end
 
+----------------
+
+AuroraFramework.game.callbacks.onOilSpill = {
+	internal = AuroraFramework.libraries.events.create("callback_onOilSpill_frameworkInternal"),
+	main = AuroraFramework.libraries.events.create("callback_onOilSpill_addon")
+}
+
+function onOilSpill(...)
+	AuroraFramework.game.callbacks.onOilSpill.internal:fire(...)
+	AuroraFramework.game.callbacks.onOilSpill.main:fire(...)
+end
+
 --------------------------------------------------------------------------------
 --// Inits \\--
 --------------------------------------------------------------------------------
@@ -2492,20 +2544,6 @@ miscellaneousLibrary = {
         return closest, dist or 0
     end,
 
-    indentTable = function(tbl, indent)
-        if not indent then
-            indent = 0
-        end
-
-        for i, v in pairs(tbl) do
-            if type(v) == "string" then
-                tbl[i] = (" "):rep(indent)..v
-            end
-        end
-
-        return tbl
-    end,
-
     ---@return string
     surround = function(input, with)
         return with:sub(1, 1)..input..with:sub(-1, -1)
@@ -2637,7 +2675,7 @@ AuroraFramework.services.playerService.events.onJoin:connect(function(player) --
     -- Credit
     AuroraFramework.services.chatService.sendMessage(
         miscellaneousLibrary.surround(config.info.addonName, "[]"), 
-        "Welcome! This server uses the '"..config.info.addonName.."' addon created by "..config.info.author..", a cuhHub developer.\nType '?help' for help, and consider joining the Discord @ "..config.info.invite..".\n"..
+        "Welcome! This server uses the '"..config.info.addonName.."' addon created by "..config.info.author.." [Discord], a cuhHub developer.\nType '?help' for help, and consider joining the Discord @ "..config.info.invite..".\n"..
             AuroraFramework.libraries.miscellaneous.switchbox("", "[Weapons DLC Required] ", config.info.weaponsRequired)..
             AuroraFramework.libraries.miscellaneous.switchbox("", "[Arid DLC Required]", config.info.aridRequired),
         player
@@ -2663,13 +2701,53 @@ AuroraFramework.services.playerService.events.onLeave:connect(function(player) -
 end)
 
 -----------------
+-- [Library | Folder: p3_commands] help.lua
+-----------------
+---------------------------------------
+------------- [Command] Shows all commands
+---------------------------------------
+
+---@param command af_services_commands_command
+---@param args table<integer, string>
+---@param player af_services_player_player
+AuroraFramework.services.commandService.create(function(command, args, player)
+    -- Pack commands into table
+    local commands = {}
+
+    for i, v in pairs(AuroraFramework.services.commandService.commands) do
+        -- probably an admin/internal/debug command
+        if v.properties.description == "" then
+            goto continue
+        end
+
+        -- shorthands stuff
+        local shorthands = {}
+
+        for _, shorthand in pairs(v.properties.shorthands) do
+            table.insert(shorthands, "?"..shorthand)
+        end
+
+        -- add to commands list but nice and formatted
+        table.insert(commands, "?"..v.properties.name.."\n     \\___"..table.concat(shorthands, ", ").."\n     \\___"..v.properties.description)
+
+        ::continue::
+    end
+
+    -- Show commands and help message
+    if not commands[1] then
+        commands[1] = "This addon has no commands."
+    end
+
+    chatAnnounce("// Help\n"..config.info.helpMessage.."\n\n// Commands:\n"..table.concat(commands, "\n"), player)
+end, "help", {"h"}, false, "Shows all commands along with help.")
+
+-----------------
 -- [Library | Folder: p3_commands] toggle.lua
 -----------------
 ---------------------------------------
-------------- Command - Toggles whether or not creatures are hostile
+------------- [Command] Toggles whether or not oil spills are cleaned up
 ---------------------------------------
 
-------------- ?toggle
 ---@param command af_services_commands_command
 ---@param args table<integer, string>
 ---@param player af_services_player_player
@@ -2678,28 +2756,18 @@ AuroraFramework.services.commandService.create(function(command, args, player)
         return announceLibrary.status.failure("This command requires admin.", player)
     end
 
-    local enabled = creatureLibrary.control.isEnabled()
-    creatureLibrary.control.setEnabled(not enabled)
+    local enabled = oilSpillCleanupEnabled
+    oilSpillCleanupEnabled = not enabled
 
-    announceLibrary.status.success(
-        AuroraFramework.libraries.miscellaneous.switchbox(
-            "[Disabled] Creatures will now be peaceful.",
-            "[Enabled] Creatures will now be hostile.",
-            not enabled
-        ),
-
-        player
-    )
-
-    chatAnnounce(player.properties.name.." has "..AuroraFramework.libraries.miscellaneous.switchbox("disabled", "enabled", not enabled).." creature hostility.")
-end, "toggle", {"t"}, false, "Toggles global creature hostility.")
+    chatAnnounce(player.properties.name.." has "..AuroraFramework.libraries.miscellaneous.switchbox("disabled", "enabled", not enabled).." oil spill cleanup.")
+end, "oc_toggle", {"oct"}, false, "Toggles oil spill cleanup.")
 
 -----------------
 -- [Main File] main.lua
 -----------------
 --------------
 --[[
-    cuhHub - No More Oil
+    cuhHub - No More Oil Spills
     Created by cuh5_ (Discord)
     This addon uses the Aurora Framework. (https://github.com/Roozz1/AuroraFramework)
 ]]
@@ -2715,6 +2783,7 @@ end, "toggle", {"t"}, false, "Toggles global creature hostility.")
 ----------------------------------------------------------------
 ---@type table<integer, af_services_player_player>
 playersUnfiltered = {}
+oilSpillCleanupEnabled = true
 
 ----------------------------------------------------------------
 -- Functions
@@ -2748,3 +2817,18 @@ debugLibrary.initialize()
 ----------------------------------------------------------------
 -- Main
 ----------------------------------------------------------------
+-- Oil Cleanup
+AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_y, delta, total, vehicle_id)
+    if not oilSpillCleanupEnabled then
+        return
+    end
+
+    server.setOilSpill(matrix.translation(tile_x, 0, tile_y), 0)
+
+    if vehicle_id == -1 then
+        return
+    end
+
+    local pos = server.getVehiclePos(vehicle_id)
+    server.setOilSpill(pos, 0)
+end)

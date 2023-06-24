@@ -1,4 +1,3 @@
---- @diagnostic disable: lowercase-global
 --- @diagnostic disable: missing-return
 
 server = {}
