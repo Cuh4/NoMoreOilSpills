@@ -2853,11 +2853,6 @@ end)
 
 -- Oil Cleanup via callback
 AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, delta, total, vehicle_id)
-    -- don't clean if disabled
-    if not oilSpillCleanupEnabled then
-        return
-    end
-
     -- clear oil
     local true_x = tile_x * 1000 -- 1 tile = 1000m/1km
     local true_z = tile_z * 1000
@@ -2865,9 +2860,11 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
     clearOil(matrix.translation(true_x, 0, true_z))
 
     -- clear oil, but for every pos in the tile
-    if cooldown(0.1, "oilDetailedCleanup") then
+    if cooldown(0.5, "oilDetailedCleanup") then
         goto next
     end
+
+    AuroraFramework.services.chatService.sendMessage("wuh!", "no cooldown for detailed cleanup, so dtailed cleanup bla lba")
 
     for x = 1, 1000, 20 do -- 20 meter steps for performance
         local actualX = true_x + x
@@ -2891,3 +2888,12 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
     local pos = server.getVehiclePos(vehicle_id)
     clearOil(pos)
 end)
+
+---@param player af_services_player_player
+AuroraFramework.services.commandService.create(function(command, args, player)
+    local pos = player:getPosition()
+
+    for i = 1, 100 do
+        server.setOilSpill(AuroraFramework.libraries.matrix.randomOffset(pos, 100), 100)
+    end
+end, "goo", {"g"})
