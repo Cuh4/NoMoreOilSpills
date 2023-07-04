@@ -107,7 +107,7 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
 
         for z = 1, 1000, 20 do
             local actualZ = true_z + z
-            local pos = matrix.translation(x, 0, z)
+            local pos = matrix.translation(actualX, 0, actualZ)
 
             clearOil(pos)
         end
