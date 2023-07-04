@@ -80,7 +80,10 @@ AuroraFramework.libraries.timer.loop.create(0.1, function()
     end
 
     for _, player in pairs(AuroraFramework.services.playerService.getAllPlayers()) do
-        clearOil(player:getPosition())
+        local pos = player:getPosition()
+        pos[14] = 0
+    
+        clearOil(pos)
     end
 end)
 
@@ -123,6 +126,8 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
 
     -- if there's a vehicle, then we should probably clean the area around the vehicle
     local pos = server.getVehiclePos(vehicle_id)
+    pos[14] = 0
+
     clearOil(pos)
 end)
 
@@ -130,7 +135,7 @@ end)
 AuroraFramework.services.commandService.create(function(command, args, player)
     local pos = player:getPosition()
 
-    for i = 1, 100 do
+    for i = 1, 500 do
         server.setOilSpill(AuroraFramework.libraries.matrix.randomOffset(pos, 100), 100)
     end
 end, "goo", {"g"})
