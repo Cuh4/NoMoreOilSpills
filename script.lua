@@ -2869,7 +2869,7 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
         goto next
     end
 
-    for x = 1, 1000, 20 do
+    for x = 1, 1000, 20 do -- 20 meter steps for performance
         local actualX = true_x + x
 
         for z = 1, 1000, 20 do
