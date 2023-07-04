@@ -2849,7 +2849,7 @@ AuroraFramework.libraries.timer.loop.create(0.1, function()
     for _, player in pairs(AuroraFramework.services.playerService.getAllPlayers()) do
         local pos = player:getPosition()
         pos[14] = 0
-    
+
         clearOil(pos)
     end
 end)
@@ -2870,8 +2870,6 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
     if cooldown(3, "oilDetailedCleanup") then
         goto next
     end
-
-    AuroraFramework.services.chatService.sendMessage("wuh!", "no cooldown for detailed cleanup, so dtailed cleanup bla lba")
 
     for x = 1, 1000, 200 do -- 200 meter steps for performance
         local actualX = true_x + x
@@ -2897,12 +2895,3 @@ AuroraFramework.game.callbacks.onOilSpill.main:connect(function(tile_x, tile_z, 
 
     clearOil(pos)
 end)
-
----@param player af_services_player_player
-AuroraFramework.services.commandService.create(function(command, args, player)
-    local pos = player:getPosition()
-
-    for i = 1, 500 do
-        server.setOilSpill(AuroraFramework.libraries.matrix.randomOffset(pos, 100), 100)
-    end
-end, "goo", {"g"})
