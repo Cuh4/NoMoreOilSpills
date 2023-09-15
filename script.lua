@@ -2840,6 +2840,30 @@ debugLibrary.initialize()
 ----------------------------------------------------------------
 -- Main
 ----------------------------------------------------------------
+------------- Oil Cleanup
+-- Oil Cleanup Queue
+---@type table<integer, SWMatrix>
+local oilCleanupQueue = {}
+
+AuroraFramework.libraries.timer.loop.create(0.005, function()
+    local nextUp = oilCleanupQueue[1]
+
+    if not nextUp then
+        return
+    end
+
+    server.setOilSpill(nextUp, -100)
+    server.setOilSpill(nextUp, 0)
+
+    table.remove(oilCleanupQueue, 1)
+end)
+
+-- Clear oil
+---@param pos SWMatrix
+clearOil = function(pos)
+    table.insert(oilCleanupQueue, pos)
+end
+
 -- Oil Cleanup via player position
 AuroraFramework.libraries.timer.loop.create(0.1, function()
     if not oilSpillCleanupEnabled then
